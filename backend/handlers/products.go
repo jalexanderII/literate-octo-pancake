@@ -5,8 +5,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/Fudoshin2596/curly-telegram/backend/data"
 	"github.com/gorilla/mux"
+	"github.com/jalexanderII/literate-octo-pancake/backend/data"
+	"github.com/jalexanderII/literate-octo-pancake/currency/protos/currency"
 )
 
 // KeyProduct is a key used for the Product object in the context
@@ -16,11 +17,12 @@ type KeyProduct struct{}
 type Products struct {
 	l *log.Logger
 	v *data.Validation
+	c currency.CurrencyClient
 }
 
-// NewProducts returns a new products handler with the given logger
-func NewProducts(l *log.Logger, v *data.Validation) *Products {
-	return &Products{l, v}
+// NewProducts returns a new products' handler with the given logger
+func NewProducts(l *log.Logger, v *data.Validation, curClient currency.CurrencyClient) *Products {
+	return &Products{l, v, curClient}
 }
 
 // GenericError is a generic error message returned by a server

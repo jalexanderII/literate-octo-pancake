@@ -15,8 +15,7 @@
 // swagger:meta
 package handlers
 
-import "github.com/Fudoshin2596/curly-telegram/backend/data"
-
+import "github.com/jalexanderII/literate-octo-pancake/backend/data"
 
 // NOTE: Types defined here are purely for documentation purposes
 // these types are not used by any of the handlers

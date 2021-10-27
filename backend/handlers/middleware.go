@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/Fudoshin2596/curly-telegram/backend/data"
+	"github.com/jalexanderII/literate-octo-pancake/backend/data"
 )
 
 // MiddlewareValidateProduct validates the product in the request and calls next if ok

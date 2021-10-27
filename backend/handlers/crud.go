@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
+	"github.com/jalexanderII/literate-octo-pancake/currency/protos/currency"
 	"net/http"
 
-	"github.com/Fudoshin2596/curly-telegram/backend/data"
+	"github.com/jalexanderII/literate-octo-pancake/backend/data"
 )
 
 // swagger:route GET /products products listProducts
@@ -63,6 +65,26 @@ func (p *Products) ListSingle(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+
+	// get exchange rate
+	rr := &currency.RateRequest{
+		Base:        currency.RateRequest_EUR,
+		Destination: currency.RateRequest_GBP,
+	}
+
+	resp, err := p.c.GetRate(context.Background(), rr)
+	if err != nil {
+		p.l.Println("[Error] error getting new rate", err)
+		err := data.ToJSON(&GenericError{Message: err.Error()}, w)
+		if err != nil {
+			return
+		}
+		return
+	}
+
+	p.l.Printf("Resp %#v", resp)
+
+	prod.Price = prod.Price * resp.Rate
 
 	err = data.ToJSON(prod, w)
 	if err != nil {

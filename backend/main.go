@@ -4,16 +4,24 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
 	"time"
 
-	"github.com/Fudoshin2596/curly-telegram/backend/data"
-	"github.com/Fudoshin2596/curly-telegram/backend/handlers"
 	"github.com/go-openapi/runtime/middleware"
 	gorilla "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/jalexanderII/literate-octo-pancake/backend/data"
+	"github.com/jalexanderII/literate-octo-pancake/backend/handlers"
+	"github.com/jalexanderII/literate-octo-pancake/currency/protos/currency"
+	"google.golang.org/grpc"
+)
+
+const (
+	server     = "localhost"
+	serverPort = "9092"
 )
 
 func main() {
@@ -27,8 +35,18 @@ func main() {
 	l := log.New(os.Stdout, "products-api-", log.LstdFlags)
 	v := data.NewValidation()
 
+	serverAddr := net.JoinHostPort(server, serverPort)
+
+	// setup insecure connection
+	conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	curClient := currency.NewCurrencyClient(conn)
+
 	// create the handlers
-	productHandler := handlers.NewProducts(l, v)
+	productHandler := handlers.NewProducts(l, v, curClient)
 
 	// create a new serve Mux and register the handlers
 	r := mux.NewRouter()
@@ -97,7 +115,7 @@ func main() {
 
 	// Doesn't block if no connections, but will otherwise wait
 	// until the timeout deadline.
-	err := srv.Shutdown(ctx)
+	err = srv.Shutdown(ctx)
 	if err != nil {
 		return
 	}
