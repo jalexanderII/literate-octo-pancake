@@ -13,3 +13,13 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+# IDE
+../.idea
+.idea/
+
+# Swagger
+gen/
+
+# Miscellaneous
+.DS_Store
