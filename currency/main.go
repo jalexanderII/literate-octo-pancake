@@ -5,6 +5,7 @@ import (
 	"net"
 
 	"github.com/hashicorp/go-hclog"
+	"github.com/jalexanderII/literate-octo-pancake/currency/data"
 	"github.com/jalexanderII/literate-octo-pancake/currency/protos/currency"
 	"github.com/jalexanderII/literate-octo-pancake/currency/server"
 	"google.golang.org/grpc"
@@ -26,7 +27,12 @@ func main() {
 	// create a new gRPC server, use WithInsecure to allow http connections
 	grpcServer := grpc.NewServer()
 	// create an instance of the Currency server
-	curService := server.NewCurrency(hlog)
+	rates, err := data.NewRates(hlog)
+	if err != nil {
+		hlog.Error("Unable to generate rates", "error", err)
+	}
+
+	curService := server.NewCurrency(hlog, rates)
 	currency.RegisterCurrencyServer(grpcServer, curService)
 
 	// register the reflection service which allows clients to determine the methods

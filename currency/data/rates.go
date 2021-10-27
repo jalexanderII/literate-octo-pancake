@@ -13,16 +13,29 @@ var ecbRatesAPI = "https://www.ecb.europa.eu/stats/eurofxref/eurofxref-daily.xml
 
 type ExchangeRates struct {
 	log   hclog.Logger
-	rates map[string]float64
+	rates map[string]float32
 }
 
 func NewRates(l hclog.Logger) (*ExchangeRates, error) {
 	er := &ExchangeRates{
-		log: l, rates: map[string]float64{},
+		log: l, rates: map[string]float32{},
 	}
 
 	err := er.getRates()
 	return er, err
+}
+
+func (e *ExchangeRates) GetRates(base, dest string) (float32, error) {
+	br, ok := e.rates[base]
+	if !ok {
+		return 0, fmt.Errorf("rate not found for currency %s", base)
+	}
+	dr, ok := e.rates[dest]
+	if !ok {
+		return 0, fmt.Errorf("rate not found for currency %s", dest)
+	}
+
+	return dr/br, nil
 }
 
 func (e *ExchangeRates) getRates() error {
@@ -39,12 +52,13 @@ func (e *ExchangeRates) getRates() error {
 	xml.NewDecoder(resp.Body).Decode(&md)
 
 	for _, c := range md.CubeData {
-		r, err := strconv.ParseFloat(c.Rate, 64)
+		r, err := strconv.ParseFloat(c.Rate, 32)
 		if err != nil {
 			return err
 		}
 
-		e.rates[c.Currency] = r
+		e.rates[c.Currency] = float32(r)
+		e.rates["EUR"] = 1
 	}
 
 	return nil

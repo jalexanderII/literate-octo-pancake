@@ -15,3 +15,4 @@ func TestNewRates(t *testing.T) {
 
 	fmt.Printf("Rates %#v", tr.rates)
 }
+ 
