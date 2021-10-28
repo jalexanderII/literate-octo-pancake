@@ -3,16 +3,17 @@ package main
 import (
 	"context"
 	"flag"
-	"log"
 	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-openapi/runtime/middleware"
 	gorilla "github.com/gorilla/handlers"
 	"github.com/gorilla/mux"
+	"github.com/hashicorp/go-hclog"
 	"github.com/jalexanderII/literate-octo-pancake/backend/data"
 	"github.com/jalexanderII/literate-octo-pancake/backend/handlers"
 	"github.com/jalexanderII/literate-octo-pancake/currency/protos/currency"
@@ -24,15 +25,17 @@ const (
 	serverPort = "9092"
 )
 
-func main() {
-	var wait time.Duration
-	var bindAddress string
+var (
+	wait        time.Duration
+	bindAddress string
+)
 
+func main() {
 	flag.DurationVar(&wait, "graceful-timeout", 30*time.Second, "the duration for which the server gracefully wait for existing connections to finish - e.g. 15s or 1m")
 	flag.StringVar(&bindAddress, "BIND_ADDRESS", ":9090", "Bind address for the server")
 	flag.Parse()
 
-	l := log.New(os.Stdout, "products-api-", log.LstdFlags)
+	l := hclog.Default()
 	v := data.NewValidation()
 
 	serverAddr := net.JoinHostPort(server, serverPort)
@@ -40,14 +43,18 @@ func main() {
 	// setup insecure connection
 	conn, err := grpc.Dial(serverAddr, grpc.WithInsecure())
 	if err != nil {
-		log.Fatal(err)
+		panic(err)
 	}
+	defer conn.Close()
 
 	// grpc client
 	curClient := currency.NewCurrencyClient(conn)
 
+	// create productsDB
+	pdb := data.NewProductsDB(l, curClient)
+
 	// create the handlers
-	productHandler := handlers.NewProducts(l, v, curClient)
+	productHandler := handlers.NewProducts(l, v, pdb)
 
 	// create a new serve Mux and register the handlers
 	r := mux.NewRouter()
@@ -57,7 +64,9 @@ func main() {
 	deleteRouter := r.Methods(http.MethodDelete).Subrouter()
 
 	// CRUD
+	getRouter.HandleFunc("/products", productHandler.ListAll).Queries("currency", "{[A-Z](3)}")
 	getRouter.HandleFunc("/products", productHandler.ListAll)
+	getRouter.HandleFunc("/products/{id:[0-9]+}", productHandler.ListSingle).Queries("currency", "{[A-Z](3)}")
 	getRouter.HandleFunc("/products/{id:[0-9]+}", productHandler.ListSingle)
 
 	postRouter.HandleFunc("/products", productHandler.Create)
@@ -80,32 +89,32 @@ func main() {
 
 	// create a new server
 	srv := &http.Server{
-		Addr:         bindAddress,       // configure the bind address
-		Handler:      gCors(r),          // set the default handler
-		ErrorLog:     l,                 // set the logger for the server
-		ReadTimeout:  5 * time.Second,   // max time to read request from the client
-		WriteTimeout: 10 * time.Second,  // max time to write response to the client
-		IdleTimeout:  120 * time.Second, // max time for connections using TCP Keep-Alive
+		Addr:         bindAddress,                                      // configure the bind address
+		Handler:      gCors(r),                                         // set the default handler
+		ErrorLog:     l.StandardLogger(&hclog.StandardLoggerOptions{}), // set the logger for the server
+		ReadTimeout:  5 * time.Second,                                  // max time to read request from the client
+		WriteTimeout: 10 * time.Second,                                 // max time to write response to the client
+		IdleTimeout:  120 * time.Second,                                // max time for connections using TCP Keep-Alive
 	}
 
 	// Run our server in a goroutine so that it doesn't block.
 	go func() {
-		log.Println("starting backend service on", bindAddress)
+		l.Info("starting backend service on", "bindAddress", bindAddress)
 		if err := srv.ListenAndServe(); err != nil {
-			l.Printf("Error starting server: %s\n", err)
+			l.Error("Error starting server", "error", err)
 		}
 	}()
 
 	// trap sigterm or interrupt and gracefully shutdown the server
 	c := make(chan os.Signal, 1)
 	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C)
-	// or SIGKILL (Ctrl+/)
-	signal.Notify(c, os.Kill)
+	// or SIGTERM (Ctrl+/)
 	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGTERM)
 
 	// Block until a signal is received.
 	sig := <-c
-	log.Println("Got signal:", sig)
+	l.Info("Got signal", "signal", sig)
 
 	// Pass a context with a timeout to tell a blocking function that it
 	// should abandon its work after the timeout elapses.
@@ -124,7 +133,7 @@ func main() {
 	// Optionally, you could run srv.Shutdown in a goroutine and block on
 	// <-ctx.Done() if your application should wait for other services
 	// to finalize based on context cancellation.
-	log.Println("shutting down")
+	l.Info("shutting down")
 	os.Exit(0)
 
 }

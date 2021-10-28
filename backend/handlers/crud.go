@@ -1,8 +1,6 @@
 package handlers
 
 import (
-	"context"
-	"github.com/jalexanderII/literate-octo-pancake/currency/protos/currency"
 	"net/http"
 
 	"github.com/jalexanderII/literate-octo-pancake/backend/data"
@@ -14,16 +12,21 @@ import (
 //	200: productsResponse
 
 // ListAll handles GET requests and returns all current products
-func (p *Products) ListAll(w http.ResponseWriter, _ *http.Request) {
-	p.l.Println("[DEBUG] get all records")
+func (p *Products) ListAll(w http.ResponseWriter, r *http.Request) {
+	p.l.Debug("Get all records")
 	w.Header().Add("Content-Type", "application/json")
 
-	prods := data.GetProducts()
+	prods, err := p.pdb.GetProducts(r.URL.Query().Get("currency"))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		data.ToJSON(&GenericError{Message: err.Error()}, w)
+		return
+	}
 
-	err := data.ToJSON(prods, w)
+	err = data.ToJSON(prods, w)
 	if err != nil {
 		// we should never be here but log the error just in case
-		p.l.Println("[ERROR] serializing product", err)
+		p.l.Error("Unable to serialize product", "error", err)
 	}
 }
 
@@ -39,15 +42,16 @@ func (p *Products) ListSingle(w http.ResponseWriter, r *http.Request) {
 
 	id := getProductID(r)
 
-	p.l.Println("[DEBUG] get record id", id)
+	cur := r.URL.Query().Get("currency")
+	p.l.Debug("Get record id", "id", id, "currency", cur)
 
-	prod, err := data.GetProductByID(id)
+	prod, err := p.pdb.GetProductByID(id, cur)
 
 	switch err {
 	case nil:
 
 	case data.ErrProductNotFound:
-		p.l.Println("[ERROR] fetching product", err)
+		p.l.Error("Unable to fetch product", "error", err)
 
 		w.WriteHeader(http.StatusNotFound)
 		err := data.ToJSON(&GenericError{Message: err.Error()}, w)
@@ -56,7 +60,7 @@ func (p *Products) ListSingle(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	default:
-		p.l.Println("[ERROR] fetching product", err)
+		p.l.Error("Unable to fetch product", "error", err)
 
 		w.WriteHeader(http.StatusInternalServerError)
 		err := data.ToJSON(&GenericError{Message: err.Error()}, w)
@@ -66,30 +70,10 @@ func (p *Products) ListSingle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// get exchange rate
-	rr := &currency.RateRequest{
-		Base:        currency.RateRequest_EUR,
-		Destination: currency.RateRequest_GBP,
-	}
-
-	resp, err := p.c.GetRate(context.Background(), rr)
-	if err != nil {
-		p.l.Println("[Error] error getting new rate", err)
-		err := data.ToJSON(&GenericError{Message: err.Error()}, w)
-		if err != nil {
-			return
-		}
-		return
-	}
-
-	p.l.Printf("Resp %#v", resp)
-
-	prod.Price = prod.Price * resp.Rate
-
 	err = data.ToJSON(prod, w)
 	if err != nil {
 		// we should never be here but log the error just in case
-		p.l.Println("[ERROR] serializing product", err)
+		p.l.Error("Unable to serialize product", "error", err)
 	}
 }
 
@@ -106,7 +90,7 @@ func (p *Products) Create(_ http.ResponseWriter, r *http.Request) {
 	// fetch the product from the context
 	prod := r.Context().Value(KeyProduct{}).(*data.Product)
 
-	p.l.Printf("[DEBUG] Inserting product: %#v\n", prod)
+	p.l.Debug("Inserting product %#v\n", prod)
 	data.AddProduct(prod)
 }
 
@@ -124,11 +108,11 @@ func (p *Products) Update(w http.ResponseWriter, r *http.Request) {
 
 	// fetch the product from the context
 	prod := r.Context().Value(KeyProduct{}).(data.Product)
-	p.l.Println("[DEBUG] updating record id", prod.ID)
+	p.l.Debug("Updating record id", "id", prod.ID)
 
-	err := data.UpdateProduct(prod)
+	err := p.pdb.UpdateProduct(prod, "")
 	if err == data.ErrProductNotFound {
-		p.l.Println("[ERROR] product not found", err)
+		p.l.Error("Product not found", "error", err)
 
 		w.WriteHeader(http.StatusNotFound)
 		err := data.ToJSON(&GenericError{Message: "Product not found in database"}, w)
@@ -155,11 +139,11 @@ func (p *Products) Delete(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Content-Type", "application/json")
 	id := getProductID(r)
 
-	p.l.Println("[DEBUG] deleting record id", id)
+	p.l.Debug("Deleting record id", "id", id)
 
 	err := data.DeleteProduct(id)
 	if err == data.ErrProductNotFound {
-		p.l.Println("[ERROR] deleting record id does not exist")
+		p.l.Error("Unable to delete record, id does not exist", "error", err)
 
 		w.WriteHeader(http.StatusNotFound)
 		err := data.ToJSON(&GenericError{Message: err.Error()}, w)
@@ -170,7 +154,7 @@ func (p *Products) Delete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err != nil {
-		p.l.Println("[ERROR] deleting record", err)
+		p.l.Error("Unable to delete record", "error", err)
 
 		w.WriteHeader(http.StatusInternalServerError)
 		err := data.ToJSON(&GenericError{Message: err.Error()}, w)

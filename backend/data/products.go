@@ -49,10 +49,10 @@ type Products []*Product
 
 func fxPrice(rate float32, p Products) Products {
 	npl := make(Products, len(p))
-	for _, product := range p {
+	for idx, product := range p {
 		np := *product
 		np.Price *= rate
-		npl = append(npl, &np)
+		npl[idx] = &np
 	}
 	return npl
 }
@@ -112,7 +112,7 @@ func (pdb *ProductsDB) GetProductByID(id int, dest string) (*Product, error) {
 	}
 
 	// new productlist with only one product
-	pl :=[]*Product{productList[i]}
+	pl := []*Product{productList[i]}
 
 	return fxPrice(rate, pl)[0], nil
 }

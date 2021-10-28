@@ -1,13 +1,12 @@
 package handlers
 
 import (
-	"log"
 	"net/http"
 	"strconv"
 
 	"github.com/gorilla/mux"
+	"github.com/hashicorp/go-hclog"
 	"github.com/jalexanderII/literate-octo-pancake/backend/data"
-	"github.com/jalexanderII/literate-octo-pancake/currency/protos/currency"
 )
 
 // KeyProduct is a key used for the Product object in the context
@@ -15,14 +14,14 @@ type KeyProduct struct{}
 
 // Products handler for getting and updating products
 type Products struct {
-	l *log.Logger
-	v *data.Validation
-	c currency.CurrencyClient
+	l   hclog.Logger
+	v   *data.Validation
+	pdb *data.ProductsDB
 }
 
 // NewProducts returns a new products' handler with the given logger
-func NewProducts(l *log.Logger, v *data.Validation, curClient currency.CurrencyClient) *Products {
-	return &Products{l, v, curClient}
+func NewProducts(l hclog.Logger, v *data.Validation, pdb *data.ProductsDB) *Products {
+	return &Products{l, v, pdb}
 }
 
 // GenericError is a generic error message returned by a server
