@@ -1,7 +1,11 @@
 package data
 
 import (
+	"context"
 	"fmt"
+
+	"github.com/hashicorp/go-hclog"
+	"github.com/jalexanderII/literate-octo-pancake/currency/protos/currency"
 )
 
 var ErrProductNotFound = fmt.Errorf("product not found")
@@ -40,27 +44,96 @@ type Product struct {
 	SKU string `json:"sku" validate:"required,sku"`
 }
 
+// Products is a collection of Product
+type Products []*Product
+
+func fxPrice(rate float32, p Products) Products {
+	npl := make(Products, len(p))
+	for _, product := range p {
+		np := *product
+		np.Price *= rate
+		npl = append(npl, &np)
+	}
+	return npl
+}
+
+type ProductsDB struct {
+	log      hclog.Logger
+	currency currency.CurrencyClient
+}
+
+func NewProductsDB(l hclog.Logger, c currency.CurrencyClient) *ProductsDB {
+	return &ProductsDB{l, c}
+}
+
+func (pdb *ProductsDB) getRate(dest string) (float32, error) {
+	// get exchange rate
+	rr := &currency.RateRequest{
+		Base:        currency.RateRequest_EUR,
+		Destination: currency.RateRequest_Currencies(currency.RateRequest_Currencies_value[dest]),
+	}
+
+	resp, err := pdb.currency.GetRate(context.Background(), rr)
+	return resp.Rate, err
+}
+
+// GetProducts returns a list of products
+func (pdb *ProductsDB) GetProducts(dest string) (Products, error) {
+	if dest == "" {
+		return productList, nil
+	}
+
+	// get exchange rate
+	rate, err := pdb.getRate(dest)
+	if err != nil {
+		pdb.log.Error("Error doing currency conversion", "destination", dest)
+	}
+
+	return fxPrice(rate, productList), nil
+}
+
 // GetProductByID returns a single product which matches the id from the
 // database.
 // If a product is not found this function returns a ProductNotFound error
-func GetProductByID(id int) (*Product, error) {
+func (pdb *ProductsDB) GetProductByID(id int, dest string) (*Product, error) {
 	i := findIndexByProductID(id)
 	if id == -1 {
 		return nil, ErrProductNotFound
 	}
 
-	return productList[i], nil
+	if dest == "" {
+		return productList[i], nil
+	}
+
+	// get exchange rate
+	rate, err := pdb.getRate(dest)
+	if err != nil {
+		pdb.log.Error("Error doing currency conversion", "destination", dest)
+	}
+
+	// new productlist with only one product
+	pl :=[]*Product{productList[i]}
+
+	return fxPrice(rate, pl)[0], nil
 }
 
 // UpdateProduct replaces a product in the database with the given
 // item.
 // If a product with the given id does not exist in the database
 // this function returns a ProductNotFound error
-func UpdateProduct(p Product) error {
+func (pdb *ProductsDB) UpdateProduct(p Product, dest string) error {
 	i := findIndexByProductID(p.ID)
 	if i == -1 {
 		return ErrProductNotFound
 	}
+
+	// get exchange rate
+	rate, err := pdb.getRate(dest)
+	if err != nil {
+		pdb.log.Error("Error doing currency conversion", "destination", dest)
+	}
+
+	p.Price *= rate
 
 	// update the product in the DB
 	productList[i] = &p
@@ -98,14 +171,6 @@ func findIndexByProductID(id int) int {
 	}
 
 	return -1
-}
-
-// Products is a collection of Product
-type Products []*Product
-
-// GetProducts returns a list of products
-func GetProducts() Products {
-	return productList
 }
 
 // productList is a hard coded list of products for this

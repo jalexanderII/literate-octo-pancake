@@ -43,6 +43,7 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// grpc client
 	curClient := currency.NewCurrencyClient(conn)
 
 	// create the handlers
@@ -80,7 +81,7 @@ func main() {
 	// create a new server
 	srv := &http.Server{
 		Addr:         bindAddress,       // configure the bind address
-		Handler:      gCors(r),                 // set the default handler
+		Handler:      gCors(r),          // set the default handler
 		ErrorLog:     l,                 // set the logger for the server
 		ReadTimeout:  5 * time.Second,   // max time to read request from the client
 		WriteTimeout: 10 * time.Second,  // max time to write response to the client
@@ -89,6 +90,7 @@ func main() {
 
 	// Run our server in a goroutine so that it doesn't block.
 	go func() {
+		log.Println("starting backend service on", bindAddress)
 		if err := srv.ListenAndServe(); err != nil {
 			l.Printf("Error starting server: %s\n", err)
 		}
@@ -98,8 +100,8 @@ func main() {
 	c := make(chan os.Signal, 1)
 	// We'll accept graceful shutdowns when quit via SIGINT (Ctrl+C)
 	// or SIGKILL (Ctrl+/)
-	signal.Notify(c, os.Interrupt)
 	signal.Notify(c, os.Kill)
+	signal.Notify(c, os.Interrupt)
 
 	// Block until a signal is received.
 	sig := <-c
